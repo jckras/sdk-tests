@@ -1,204 +1,98 @@
-// package main
-
-// import (
-// 	"context"
-
-// 	"go.viam.com/rdk/components/camera"
-// 	"go.viam.com/rdk/logging"
-// 	"go.viam.com/rdk/robot/client"
-// 	"go.viam.com/utils/rpc"
-// )
-
-// func main() {
-// 	logger := logging.NewDebugLogger("client")
-// 	machine, err := client.New(
-// 		context.Background(),
-// 		"ada-main.ikzfbcf5i3.viam.cloud",
-// 		logger,
-// 		client.WithDialOptions(rpc.WithEntityCredentials(
-// 			"783426e6-7f5c-4821-918e-0e9c9e00b99a",
-// 			rpc.Credentials{
-// 				Type:    rpc.CredentialsTypeAPIKey,
-// 				Payload: "sbqyy0lvrxdtwrjaiml3f740kbq1qdij",
-// 			})),
-// 	)
-// 	if err != nil {
-// 		logger.Fatal(err)
-// 	}
-
-// 	defer machine.Close(context.Background())
-// 	logger.Info("Resources:")
-// 	logger.Info(machine.ResourceNames())
-
-// 	// Note that the pin supplied is a placeholder. Please change this to a valid pin.
-// 	// board-1
-// 	// board1, err := board.FromRobot(machine, "board-1")
-// 	// if err != nil {
-// 	//   logger.Error(err)
-// 	//   return
-// 	// }
-// 	// board1ReturnValue, err := board1.GPIOPinByName("16")
-// 	// if err != nil {
-// 	//   logger.Error(err)
-// 	//   return
-// 	// }
-// 	// logger.Infof("board-1 GPIOPinByName return value: %+v", board1ReturnValue)
-
-// 	// camera-3
-// 	camera3, err := camera.FromRobot(machine, "camera-3")
-// 	if err != nil {
-// 		logger.Error(err)
-// 		return
-// 	}
-// 	camera3ReturnValue, err := camera3.Properties(context.Background())
-// 	if err != nil {
-// 		logger.Error(err)
-// 		return
-// 	}
-// 	logger.Infof("camera-3 Properties return value: %+v", camera3ReturnValue)
-
-// 	_, _, err = camera3.Images(context.Background())
-
-// 	// camera2, err := camera.FromRobot(machine, "camera-2")
-// 	// if err != nil {
-// 	// 	logger.Error(err)
-// 	// 	return
-// 	// }
-// 	// camera2ReturnValue, err := camera2.Properties(context.Background())
-// 	// if err != nil {
-// 	// 	logger.Error(err)
-// 	// 	return
-// 	// }
-// 	// logger.Infof("camera-2 Properties return value: %+v", camera2ReturnValue)
-
-// 	// _, _, err = camera2.Images(context.Background())
-
-// 	// camera1, err := camera.FromRobot(machine, "camera-1")
-// 	// if err != nil {
-// 	// 	logger.Error(err)
-// 	// 	return
-// 	// }
-// 	// camera1ReturnValue, err := camera1.Properties(context.Background())
-// 	// if err != nil {
-// 	// 	logger.Error(err)
-// 	// 	return
-// 	// }
-// 	// logger.Infof("camera-1 Properties return value: %+v", camera1ReturnValue)
-
-// 	// _, _, err = camera1.Images(context.Background())
-
-// }
 package main
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 
-	"go.viam.com/rdk/components/board"
-	"go.viam.com/rdk/components/camera"
+	"go.mongodb.org/mongo-driver/bson"
+	pbData "go.viam.com/api/app/data/v1"
 	"go.viam.com/rdk/logging"
-	"go.viam.com/rdk/robot/client"
 	"go.viam.com/utils/rpc"
 )
 
+var (
+	viamBaseURL  = "https://app.viam.com"
+	viamAPIKey   = "fc3aoh6xx5kmfzb135guvxjcf12l02k8"
+	viamAPIKeyID = "b5cf5cb8-5dcc-41d4-8b1f-ca79e28cef72"
+)
+
+func getDataClient(ctx context.Context, viamBaseURL, viamAPIKeyID, viamAPIKey string, logger logging.Logger) (pbData.DataServiceClient, error) {
+	u, err := url.Parse(viamBaseURL + ":443")
+	if err != nil {
+		return nil, err
+	}
+
+	opts := rpc.WithEntityCredentials(
+		viamAPIKeyID,
+		rpc.Credentials{
+			Type:    rpc.CredentialsTypeAPIKey,
+			Payload: viamAPIKey,
+		})
+	conn, err := rpc.DialDirectGRPC(ctx, u.Host, logger.AsZap(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return pbData.NewDataServiceClient(conn), nil
+}
+
+//another way to do it!
+// func getDataClient(ctx context.Context) (pbData.DataServiceClient, error) {
+// 	accessToken := os.Getenv("ACCESS_TOKEN")
+// 	clientConn, err := rpc.DialDirectGRPC(
+// 		ctx,
+// 		"app.viam.com:443",
+// 		nil,
+// 		rpc.WithStaticAuthenticationMaterial(accessToken),
+// 	)
+// 	if err != nil {
+// 		return nil, errors.Wrap(err, "failed to establish gRPC connection")
+// 	}
+
+// 	return pbData.NewDataServiceClient(clientConn), nil
+// }
+
 func main() {
-	logger := logging.NewDebugLogger("client")
-	machine, err := client.New(
-		context.Background(),
-		"ada-main.ikzfbcf5i3.viam.cloud",
-		logger,
-		client.WithDialOptions(rpc.WithEntityCredentials(
-			"783426e6-7f5c-4821-918e-0e9c9e00b99a",
-			rpc.Credentials{
-				Type:    rpc.CredentialsTypeAPIKey,
-				Payload: "sbqyy0lvrxdtwrjaiml3f740kbq1qdij",
-			})),
-	)
+	dataClient, err := getDataClient(context.Background(), viamBaseURL, viamAPIKeyID, viamAPIKey, logging.NewLogger("viam"))
+	// dataClient, err := getDataClient(context.Background())
 	if err != nil {
-		logger.Fatal(err)
-	}
-
-	defer machine.Close(context.Background())
-	logger.Info("Resources:")
-	logger.Info(machine.ResourceNames())
-
-	// Note that the pin supplied is a placeholder. Please change this to a valid pin.
-	// board-1
-	board1, err := board.FromRobot(machine, "board-1")
-	if err != nil {
-		logger.Error(err)
+		fmt.Println("Error getting data client:", err)
 		return
 	}
-	board1ReturnValue, err := board1.GPIOPinByName("16")
+	print("i got dataClient", dataClient)
+
+	// Create BSON documents for MongoDB queries
+	matchStage := bson.M{"$match": bson.M{"organization_id": "e76d1b3b-0468-4efd-bb7f-fb1d2b352fcb"}}
+	limitStage := bson.M{"$limit": 1}
+	// Convert to BSON byte arrays
+	matchBytes, err := bson.Marshal(matchStage)
 	if err != nil {
-		logger.Error(err)
+		fmt.Println("Error marshalling match stage:", err)
 		return
 	}
-	logger.Infof("board-1 GPIOPinByName return value: %+v", board1ReturnValue)
-
-	// camera-3
-	camera3, err := camera.FromRobot(machine, "camera-3")
+	limitBytes, err := bson.Marshal(limitStage)
 	if err != nil {
-		logger.Error(err)
+		fmt.Println("Error marshalling limit stage:", err)
 		return
 	}
-	camera3ReturnValue, err := camera3.Properties(context.Background())
+
+	// Create the TabularDataByMQL request
+	mqlRequest := &pbData.TabularDataByMQLRequest{
+		OrganizationId: "e76d1b3b-0468-4efd-bb7f-fb1d2b352fcb",
+		MqlBinary:      [][]byte{matchBytes, limitBytes}, // Pass both stages as MqlBinary
+	}
+
+	resp, err := dataClient.TabularDataByMQL(context.Background(), mqlRequest)
 	if err != nil {
-		logger.Error(err)
+		fmt.Println("Error calling TabularDataByMQL:", err)
 		return
 	}
-	logger.Infof("camera-3 Properties return value: %+v", camera3ReturnValue)
 
-	// camera-1
-	// camera1, err := camera.FromRobot(machine, "camera-1")
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// camera1ReturnValue, err := camera1.Properties(context.Background())
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// logger.Infof("camera-1 Properties return value: %+v", camera1ReturnValue)
-
-	// // camera-2
-	// camera2, err := camera.FromRobot(machine, "camera-2")
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// camera2ReturnValue, err := camera2.Properties(context.Background())
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// logger.Infof("camera-2 Properties return value: %+v", camera2ReturnValue)
-
-	// // camera-4
-	// camera4, err := camera.FromRobot(machine, "camera-4")
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// camera4ReturnValue, err := camera4.Properties(context.Background())
-	// if err != nil {
-	// 	logger.Error(err)
-	// 	return
-	// }
-	// logger.Infof("camera-4 Properties return value: %+v", camera4ReturnValue)
-
-	// logitech-cam
-	logitechCam, err := camera.FromRobot(machine, "logitech-cam")
-	if err != nil {
-		logger.Error(err)
-		return
+	// Print the response to verify
+	if len(resp.GetData()) > 0 {
+		fmt.Println("Received data:", resp.GetData())
+	} else {
+		fmt.Println("No data received.")
 	}
-	logitechCamReturnValue, err := logitechCam.Properties(context.Background())
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-	logger.Infof("logitech-cam Properties return value: %+v", logitechCamReturnValue)
-	logitechCam.Images(context.Background())
-
 }
